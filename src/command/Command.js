@@ -4,7 +4,7 @@
  * @author Kay <kylrs00@gmail.com>
  * @license ISC - For more information, see the LICENSE.md file packaged with this file.
  * @since r20.1.0
- * @version v1.2.1
+ * @version v1.2.2
  */
 
 const fs = require('fs');
@@ -114,7 +114,9 @@ module.exports = class Command {
         if (args instanceof Error) return args;
 
         // Execute the command with the parsed arguments
-        return command.execute(client, message, args);
+        if (!await command.execute(client, message, args)) {
+            message.channel.send(`**Usage:** \`${prefix}${command.getUsage()}\` - ${command.description}`);
+        }
     }
 
     /**
