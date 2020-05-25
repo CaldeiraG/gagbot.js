@@ -4,7 +4,7 @@
  * @author Kay <kylrs00@gmail.com>
  * @license ISC - For more information, see the LICENSE.md file packaged with this file.
  * @since r20.1.0
- * @version v1.1.2
+ * @version v1.2.0
  */
 
 const fs = require('fs');
@@ -147,16 +147,12 @@ module.exports = class Command {
     parseArgs(tail) {
         let args = new ArgumentList();
         // Only parse args if they are required
-        if (this.args) {
-            if (tail.length === 0) return new Error(`Command '${this.name}' can't be called without args.`);
+        if (this.args && tail.length === 0) return new Error(`Command '${this.name}' can't be called without args.`);
+
+        if (this.args instanceof Object) {
 
             // If required args specify keys use them, else use numbers [0, n)
-            let names;
-            if (this.args instanceof Object) {
-                names = Object.keys(this.args);
-            } else if (Array.isArray(this.args)) {
-                names = this.args.keys();
-            }
+            const names = Object.keys(this.args);
 
             // Iterate over the required arguments, attempting to match a string that can be parsed as the given type
             for (let name of names) {
@@ -171,8 +167,9 @@ module.exports = class Command {
                 args.add(name, match, type);
                 tail = rest;
             }
+
         } else {
-            // If no args are required, split by whitespace and assume all tokens are of type String
+            // If no arg types are specified split by whitespace and assume all tokens are of type String
             tail.split(/\s+/)
                 .forEach((arg, i) => args.add(i, arg, String));
         }
@@ -193,6 +190,27 @@ module.exports = class Command {
      */
     execute(client, message, args) {
         return new Error('Cannot call the abstract Command.');
+    }
+
+    /**
+     *
+     */
+    getUsage() {
+        let usage = this.name;
+        if (this.args) {
+            if (this.args instanceof Object) {
+                for (let key of this.args.keys()) {
+                    const ident = typeof key === "string" ? `${key}:` : '';
+                    const type = this.args[key].name;
+                    usage += ' ' + (type.startsWith('?') ? `[${ident}${type.slice(1)}]` : `<${ident}${type}>`);
+                }
+            }
+            else {
+                usage += ' <args>';
+            }
+        }
+
+        return usage;
     }
 
 };
