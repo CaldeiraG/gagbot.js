@@ -63,6 +63,16 @@ module.exports = class RRSetCommand extends Command {
         return false;
     }
 
+    /**
+     * Get the db document associated with the message's guild
+     *
+     * @author Kay <kylrs00@gmail.com>
+     * @since r20.2.0
+     *
+     * @param {Client} client
+     * @param {Message} message
+     * @returns {Document}
+     */
     async getGuildDoc(client, message) {
        const guildDoc = await client.db.guild.findOne({id: message.guild.id});
        if (!guildDoc) {
@@ -72,6 +82,16 @@ module.exports = class RRSetCommand extends Command {
        return guildDoc;
     }
 
+    /**
+     * Commit any changes to the guild document to the database
+     *
+     * @author Kay <kylrs00@gmail.com>
+     * @since r20.2.0
+     *
+     * @param {Document} doc
+     * @param {Message} message
+     * @param {string} successMessage
+     */
     saveGuildDoc(doc, message, successMessage) {
         doc.markModified('data.reactionroles');
         doc.save(function(err) {
@@ -85,6 +105,16 @@ module.exports = class RRSetCommand extends Command {
         });
     }
 
+    /**
+     * Get a roleset object from the guild doc. Return null if the set doesn't exist.
+     *
+     * @author Kay <kylrs00@gmail.com>
+     * @since r20.2.0
+     *
+     * @param {Document} guildDoc
+     * @param {string} setName#
+     * @return {object}
+     */
     getSet(guildDoc, setName) {
         // Get or initialise reactionroles data object
         if (!guildDoc.data.reactionroles) guildDoc.data.reactionroles = {};
@@ -101,6 +131,18 @@ module.exports = class RRSetCommand extends Command {
         return sets[setName];
     }
 
+    /**
+     * Add or update an entry in a specified roleset
+     *
+     * @author Kay <kylrs00@gmail.com>
+     * @since r20.2.0
+     *
+     * @param {Client} client
+     * @param {Message} message
+     * @param {ArgumentList} args
+     * @param {boolean} update
+     * @returns {boolean}
+     */
     async insertEntry(client, message, args, update) {
 
         if (!args.get('react') || !args.get('role')) return false;
@@ -142,6 +184,17 @@ module.exports = class RRSetCommand extends Command {
         return true;
     }
 
+    /**
+     * Remove an entry from a roleset
+     *
+     * @author Kay <kylrs00@gmail.com>
+     * @since r20.2.0
+     *
+     * @param {Client} client
+     * @param {Message} message
+     * @param {ArgumentList} args
+     * @returns {boolean}
+     */
     async deleteEntry(client, message, args) {
 
         if (!args.get('react')) return false;
@@ -178,6 +231,17 @@ module.exports = class RRSetCommand extends Command {
         return true;
     }
 
+    /**
+     * List all entries in a roleset
+     *
+     * @author Kay <kylrs00@gmail.com>
+     * @since r20.2.0
+     *
+     * @param {Client} client
+     * @param {Message} message
+     * @param {ArgumentList} args
+     * @returns {boolean}
+     */
     async listSet(client, message, args) {
         const guildDoc = await this.getGuildDoc(client, message);
         if (!guildDoc) return true;
@@ -207,6 +271,17 @@ module.exports = class RRSetCommand extends Command {
         return true;
     }
 
+    /**
+     * Delete a roleset
+     *
+     * @author Kay <kylrs00@gmail.com>
+     * @since r20.2.0
+     *
+     * @param {Client} client
+     * @param {Message} message
+     * @param {ArgumentList} args
+     * @returns {boolean}
+     */
     async dropSet(client, message, args) {
         const guildDoc = await this.getGuildDoc(client, message);
         if (!guildDoc) return true;
@@ -228,6 +303,17 @@ module.exports = class RRSetCommand extends Command {
         return true;
     }
 
+    /**
+     * Toggle whether more than one role can be chosen from a roleset
+     *
+     * @author Kay <kylrs00@gmail.com>
+     * @since r20.2.0
+     *
+     * @param {Client} client
+     * @param {Message} message
+     * @param {ArgumentList} args
+     * @returns {boolean}
+     */
     async toggleExclusive(client, message, args) {
         const guildDoc = await this.getGuildDoc(client, message);
         if (!guildDoc) return true;
