@@ -20,7 +20,7 @@ module.exports = class RRSetCommand extends Command {
      */
     constructor() {
         super("rrset", "Manipulate rolesets for reaction menus.", "gagbot:reactionroles:roleset", false, {
-            cmd: choice(i('add'), i('del'), i('clear'), i('update'), i('list')),
+            cmd: choice(i('add'), i('update'), i('delete'), i('drop'), i('list'), i('togglex')),
             set: str,
             react: optional(emoji),
             role: optional(role),
@@ -50,12 +50,14 @@ module.exports = class RRSetCommand extends Command {
                 return this.insertEntry(client, message, args, false);
             case 'update':
                 return this.insertEntry(client, message, args, true);
-            case 'del':
+            case 'delete':
                 return this.deleteEntry(client, message, args);
-            case 'clear':
-                return this.clearSet(client, message, args);
+            case 'drop':
+                return this.dropSet(client, message, args);
             case 'list':
                 return this.listSet(client, message, args);
+            case 'togglex':
+                return this.toggleExclusive(client, message, args);
         }
 
         return false;
@@ -70,9 +72,17 @@ module.exports = class RRSetCommand extends Command {
        return guildDoc;
     }
 
-    saveGuildDoc(doc, callback) {
+    saveGuildDoc(doc, message, successMessage) {
         doc.markModified('data.reactionroles');
-        doc.save(callback);
+        doc.save(function(err) {
+            if (err) {
+                message.channel.send(`***${client.config.errorMessage}***\n Something went wrong...`);
+                console.error(err);
+                return;
+            }
+
+            message.channel.send(successMessage);
+        });
     }
 
     getSet(guildDoc, setName) {
@@ -104,7 +114,7 @@ module.exports = class RRSetCommand extends Command {
 
         // Get or create the given roleset
         let set = this.getSet(guildDoc, setName);
-        if (set === null) set = guildDoc.data.reactionroles.sets[setName] = {};
+        if (set === null) set = guildDoc.data.reactionroles.sets[setName] = { exclusive: false, entries: {} };
 
         // If adding, and the set already has the given emoji, error
         if (!update && set.hasOwnProperty(react)) {
@@ -119,22 +129,16 @@ module.exports = class RRSetCommand extends Command {
         }
 
         let oldRole;
-        if (update) oldRole = set[react];
+        if (update) oldRole = set.entries[react];
 
         // Add the reaction role
-        set[react] = role;
+        set.entries[react] = role;
 
         // Commit the change
-        this.saveGuildDoc(guildDoc, function(err) {
-            if (err) {
-                message.channel.send(`***${client.config.errorMessage}***\n Something went wrong...`);
-                console.error(err);
-                return;
-            }
+        const msg = update ? `Updated <@&${oldRole}> to <@&${role}> in \`${setName}\``
+                           : `Added ${react} to \`${setName}\`.`;
+        this.saveGuildDoc(guildDoc, message, msg);
 
-            if (update) message.channel.send(`Updated <@&${oldRole}> to <@&${role}> in \`${setName}\``);
-            else message.channel.send(`Added ${react} to \`${setName}\`.`);
-        });
         return true;
     }
 
@@ -155,29 +159,22 @@ module.exports = class RRSetCommand extends Command {
 
         const react = args.get('react');
 
-        if (!set.hasOwnProperty(react)) {
+        if (!set.entries.hasOwnProperty(react)) {
             await message.channel.send(`The set \`${setName}\` has no reaction ${react}.`);
             return true;
         }
 
         // Remove the reaction role from the set
-        delete set[react];
+        delete set.entries[react];
 
         // If the set is now empty, delete it
-        if (!Object.entries(set).length) {
+        if (!Object.entries(set.entries).length) {
             delete guildDoc.data.reactionroles.sets[setName];
         }
 
         // Commit the change
-        this.saveGuildDoc(guildDoc, function(err) {
-            if (err) {
-                message.channel.send(`***${client.config.errorMessage}***\n Something went wrong...`);
-                console.error(err);
-                return;
-            }
+        this.saveGuildDoc(guildDoc, message, `Deleted ${react} from \`${setName}\`.`);
 
-            message.channel.send(`Deleted ${react} from \`${setName}\`.`);
-        });
         return true;
     }
 
@@ -193,7 +190,7 @@ module.exports = class RRSetCommand extends Command {
             return true;
         }
 
-        const reacts = Object.keys(set);
+        const reacts = Object.keys(set.entries);
         if (!reacts.length) {
             await message.channel.send(`There are no items in the set \`${setName}\`.`);
             return true;
@@ -201,7 +198,7 @@ module.exports = class RRSetCommand extends Command {
 
         let msg = `**Reaction Roles in \`${setName}\`:**\n`;
         for (let react of reacts) {
-            const role = message.guild.roles.cache.get(set[react]);
+            const role = message.guild.roles.cache.get(set.entries[react]);
             msg += `${react} grants ${role}\n`;
         }
         msg += "";
@@ -210,7 +207,7 @@ module.exports = class RRSetCommand extends Command {
         return true;
     }
 
-    async clearSet(client, message, args) {
+    async dropSet(client, message, args) {
         const guildDoc = await this.getGuildDoc(client, message);
         if (!guildDoc) return true;
 
@@ -226,16 +223,32 @@ module.exports = class RRSetCommand extends Command {
         delete guildDoc.data.reactionroles.sets[setName];
 
         // Commit the change
-        this.saveGuildDoc(guildDoc, function(err) {
-            if (err) {
-                message.channel.send(`***${client.config.errorMessage}***\n Something went wrong...`);
-                console.error(err);
-                return;
-            }
-
-            message.channel.send(`Cleared the set ${setName}.`);
-        });
+        this.saveGuildDoc(guildDoc, message, `Cleared the set ${setName}.`);
 
         return true;
     }
+
+    async toggleExclusive(client, message, args) {
+        const guildDoc = await this.getGuildDoc(client, message);
+        if (!guildDoc) return true;
+
+        const setName = args.get("set");
+        const set = this.getSet(guildDoc, setName);
+
+        // If the set doesn't exist, error
+        if (!set) {
+            await message.channel.send(`No such set \`${setName}\`.`);
+            return true;
+        }
+
+        // Toggle whether the set is exclusive or not.
+        set.exclusive = !set.exclusive;
+
+        // Commit the change
+        const state = set.exclusive ? "now" : "no longer ";
+        this.saveGuildDoc(guildDoc, message, `The set \`${setName}\` is ${state} exclusive.`);
+
+        return true;
+    }
+
 };
