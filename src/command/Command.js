@@ -4,7 +4,7 @@
  * @author Kay <kylrs00@gmail.com>
  * @license ISC - For more information, see the LICENSE.md file packaged with this file.
  * @since r20.1.0
- * @version v1.2.0
+ * @version v1.2.1
  */
 
 const fs = require('fs');
@@ -193,13 +193,19 @@ module.exports = class Command {
     }
 
     /**
+     * Return the name and expected arguments of the command as a user-friendly string
      *
+     * @author Kay <kylrs00@gmail.com>
+     * @since r20.2.0
+     *
+     * @returns {string}
      */
     getUsage() {
         let usage = this.name;
+
         if (this.args) {
             if (this.args instanceof Object) {
-                for (let key of this.args.keys()) {
+                for (let key of Object.keys(this.args)) {
                     const ident = typeof key === "string" ? `${key}:` : '';
                     const type = this.args[key].name;
                     usage += ' ' + (type.startsWith('?') ? `[${ident}${type.slice(1)}]` : `<${ident}${type}>`);
