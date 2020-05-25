@@ -4,7 +4,7 @@
  * @author Kay <kylrs00@gmail.com>
  * @license ISC - For more information, see the LICENSE.md file packaged with this file.
  * @since r20.1.0
- * @version v1.1.2
+ * @version v1.2.0
  */
 
 /**
@@ -210,4 +210,27 @@ module.exports.emoji = function emoji(input) {
     const emoji = match[0].trim();
     const rest = input.substring(match[0].length);
     return [emoji, rest];
+};
+
+
+/**
+ * Take a parsing function X, and return a parsing function that succeeds even if parsing X fails, without consuming input
+ *
+ * @author Kay <kylrs00@gmail.com>
+ * @since r20.2.0
+ *
+ * @param {function(input):[string|null, string]} arg
+ * @returns {function(input):[string|undefined, string]}
+ */
+module.exports.optional = function optional(arg) {
+    const key = `?${arg.name}`;
+    const wrapper = {
+        [key]: function(input) {
+            const [match, rest] = arg(input);
+            if (match === null) return [undefined, input];
+            return [match, rest];
+        }
+    };
+
+    return wrapper[key];
 };
