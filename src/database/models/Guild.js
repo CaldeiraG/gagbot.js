@@ -65,6 +65,18 @@ schema.static('ensureDefaults', async function(guild) {
 
 });
 
+/**
+ * Get the db document for a specific guild
+ */
+const cache = {};
+schema.static('fetchByGuildID', async function(gid) {
+    if (!cache[gid]) {
+        cache[gid] = await this.findOne({ id: gid }, { minimize: false });
+    }
+
+    return cache[gid];
+});
+
 const model = mongoose.model('Guild', schema);
 
 module.exports = model;

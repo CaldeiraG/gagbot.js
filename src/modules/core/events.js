@@ -24,6 +24,7 @@ module.exports = {
         for (let guild of client.guilds.cache.values()) {
             await client.db.guild.ensureDefaults(guild);
             console.log(`  > ${guild.name}`);
+            client.emit("initGuild", guild);
         }
     },
 

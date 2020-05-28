@@ -9,6 +9,7 @@
 
 const Command = require('../../../command/Command.js');
 const { choice, i, str, optional, emoji, role } = require('../../../command/arguments.js');
+const RoleSet = require('../RoleSet.js');
 
 module.exports = class RRSetCommand extends Command {
 
@@ -47,9 +48,9 @@ module.exports = class RRSetCommand extends Command {
 
         switch (args.get('cmd')) {
             case 'add':
-                return this.insertEntry(client, message, args, false);
+                return this.addEntry(client, message, args);
             case 'update':
-                return this.insertEntry(client, message, args, true);
+                return this.updateEntry(client, message, args);
             case 'delete':
                 return this.deleteEntry(client, message, args);
             case 'drop':
@@ -64,71 +65,34 @@ module.exports = class RRSetCommand extends Command {
     }
 
     /**
-     * Get the db document associated with the message's guild
+     * Add or update an entry in a specified roleset
      *
      * @author Kay <kylrs00@gmail.com>
      * @since r20.2.0
      *
      * @param {Client} client
      * @param {Message} message
-     * @returns {Document}
+     * @param {ArgumentList} args
+     * @returns {boolean}
      */
-    async getGuildDoc(client, message) {
-       const guildDoc = await client.db.guild.findOne({id: message.guild.id});
-       if (!guildDoc) {
-           console.error(`Error while setting greet channel:\n  Couldn't find a guild document with {id: ${message.guild.id}}`);
-           await message.channel.send(`***${client.config.errorMessage}***\n Something went wrong...`);
-       }
-       return guildDoc;
-    }
+    async addEntry(client, message, args) {
 
-    /**
-     * Commit any changes to the guild document to the database
-     *
-     * @author Kay <kylrs00@gmail.com>
-     * @since r20.2.0
-     *
-     * @param {Document} doc
-     * @param {Message} message
-     * @param {string} successMessage
-     */
-    saveGuildDoc(doc, message, successMessage) {
-        doc.markModified('data.reactionroles');
-        doc.save(function(err) {
+        if (!args.get('react') || !args.get('role')) return false;
+
+        const roleset = new RoleSet(client, message.guild, args.get('set'));
+        roleset.addEntry(args.get('react'), args.get('role'), function(err, set) {
             if (err) {
-                message.channel.send(`***${client.config.errorMessage}***\n Something went wrong...`);
+                message.channel.send(err.message);
                 console.error(err);
                 return;
             }
 
-            message.channel.send(successMessage);
+            roleset.commit(function() {
+                message.channel.send(`Added ${react} to \`${set.name}\`.`)
+            });
         });
-    }
 
-    /**
-     * Get a roleset object from the guild doc. Return null if the set doesn't exist.
-     *
-     * @author Kay <kylrs00@gmail.com>
-     * @since r20.2.0
-     *
-     * @param {Document} guildDoc
-     * @param {string} setName#
-     * @return {object}
-     */
-    getSet(guildDoc, setName) {
-        // Get or initialise reactionroles data object
-        if (!guildDoc.data.reactionroles) guildDoc.data.reactionroles = {};
-        const data = guildDoc.data.reactionroles;
-
-        // Get or initialise sets object
-        if (!data.sets) data.sets = {};
-        const sets = data.sets;
-
-
-        // Get or initialise the given set
-        if (!(setName in sets)) return null;
-
-        return sets[setName];
+        return true;
     }
 
     /**
@@ -140,46 +104,32 @@ module.exports = class RRSetCommand extends Command {
      * @param {Client} client
      * @param {Message} message
      * @param {ArgumentList} args
-     * @param {boolean} update
      * @returns {boolean}
      */
-    async insertEntry(client, message, args, update) {
+    async updateEntry(client, message, args) {
 
         if (!args.get('react') || !args.get('role')) return false;
 
-        const guildDoc = await this.getGuildDoc(client, message);
-        if (!guildDoc) return true;
+        RoleSet.fetch(client, message.guild, args.get('set'), (err, roleset) => {
+            if (err) {
+                message.channel.send(err.message);
+                console.error(err);
+                return;
+            }
 
-        const setName = args.get('set');
-        const react = args.get('react');
-        const role = args.get('role');
+            roleset.updateEntry(args.get('react'), args.get('role'), (err) => {
+                if (err) {
+                    message.channel.send(err.message);
+                    console.error(err);
+                    return;
+                }
 
-        // Get or create the given roleset
-        let set = this.getSet(guildDoc, setName);
-        if (set === null) set = guildDoc.data.reactionroles.sets[setName] = { exclusive: false, entries: {} };
+                roleset.commit(() => {
+                    message.channel.send(`Added ${react} to \`${setName}\`.`)
+                });
+            });
+        });
 
-        // If adding, and the set already has the given emoji, error
-        if (!update && set.hasOwnProperty(react)) {
-            await message.channel.send(`The ${react} emoji is already in \`${setName}\`!`);
-            return true;
-        }
-
-        // If updating, and the set doesn't have the given emoji, error
-        if (update && !set.hasOwnProperty(react)) {
-            await message.channel.send(`The set \`${setName}\` doesn't have the emoji ${react}.`);
-            return true;
-        }
-
-        let oldRole;
-        if (update) oldRole = set.entries[react];
-
-        // Add the reaction role
-        set.entries[react] = role;
-
-        // Commit the change
-        const msg = update ? `Updated <@&${oldRole}> to <@&${role}> in \`${setName}\``
-                           : `Added ${react} to \`${setName}\`.`;
-        this.saveGuildDoc(guildDoc, message, msg);
 
         return true;
     }
@@ -199,11 +149,11 @@ module.exports = class RRSetCommand extends Command {
 
         if (!args.get('react')) return false;
 
-        const guildDoc = await this.getGuildDoc(client, message);
+        const guildDoc = await ReactionRoles.getGuildDoc(client, message);
         if (!guildDoc) return true;
 
         const setName = args.get("set");
-        const set = this.getSet(guildDoc, setName);
+        const set = ReactionRoles.getSet(guildDoc, setName);
 
         if (set === null) {
             await message.channel.send(`No such set \`${setName}\`.`);
@@ -243,11 +193,11 @@ module.exports = class RRSetCommand extends Command {
      * @returns {boolean}
      */
     async listSet(client, message, args) {
-        const guildDoc = await this.getGuildDoc(client, message);
+        const guildDoc = await ReactionRoles.getGuildDoc(client, message);
         if (!guildDoc) return true;
 
         const setName = args.get("set");
-        const set = this.getSet(guildDoc, setName);
+        const set = ReactionRoles.getSet(guildDoc, setName);
 
         if (set === null) {
             await message.channel.send(`No such set \`${setName}\`.`);
@@ -283,13 +233,13 @@ module.exports = class RRSetCommand extends Command {
      * @returns {boolean}
      */
     async dropSet(client, message, args) {
-        const guildDoc = await this.getGuildDoc(client, message);
+        const guildDoc = await ReactionRoles.getGuildDoc(client, message);
         if (!guildDoc) return true;
 
         const setName = args.get("set");
 
         // If the set doesn't exist, error
-        if (!this.getSet(guildDoc, setName)) {
+        if (!ReactionRoles.getSet(guildDoc, setName)) {
             await message.channel.send(`No such set \`${setName}\`.`);
             return true;
         }
@@ -298,7 +248,7 @@ module.exports = class RRSetCommand extends Command {
         delete guildDoc.data.reactionroles.sets[setName];
 
         // Commit the change
-        this.saveGuildDoc(guildDoc, message, `Cleared the set ${setName}.`);
+        ReactionRoles.saveGuildDoc(guildDoc, message, `Cleared the set ${setName}.`);
 
         return true;
     }
@@ -315,11 +265,11 @@ module.exports = class RRSetCommand extends Command {
      * @returns {boolean}
      */
     async toggleExclusive(client, message, args) {
-        const guildDoc = await this.getGuildDoc(client, message);
+        const guildDoc = await ReactionRoles.getGuildDoc(client, message);
         if (!guildDoc) return true;
 
         const setName = args.get("set");
-        const set = this.getSet(guildDoc, setName);
+        const set = ReactionRoles.getSet(guildDoc, setName);
 
         // If the set doesn't exist, error
         if (!set) {
@@ -332,7 +282,7 @@ module.exports = class RRSetCommand extends Command {
 
         // Commit the change
         const state = set.exclusive ? "now" : "no longer ";
-        this.saveGuildDoc(guildDoc, message, `The set \`${setName}\` is ${state} exclusive.`);
+        ReactionRoles.saveGuildDoc(guildDoc, message, `The set \`${setName}\` is ${state} exclusive.`);
 
         return true;
     }
